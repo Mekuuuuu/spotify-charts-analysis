@@ -1,0 +1,3 @@
+reqs
+ - install packages in requirements.txt
+ - download GeckoDriver and in PATH
