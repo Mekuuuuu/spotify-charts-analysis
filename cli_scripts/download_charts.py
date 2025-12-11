@@ -214,6 +214,8 @@ def download_charts(driver, download_urls):
 
         except Exception as e:
             print(f"Error downloading CSV from {url}: {e}")
+            print(f"Retrying download for {url}...")
+            download_charts(driver, [url])  # retry download for this URL
 
 
 
