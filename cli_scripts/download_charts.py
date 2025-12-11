@@ -9,12 +9,10 @@ import glob
 from datetime import datetime, timedelta
 import argparse
 
-# ===== TARGET CHART URLs =====
-download_urls = [
-    "https://charts.spotify.com/charts/view/regional-global-daily/2025-12-05",
-    "https://charts.spotify.com/charts/view/regional-global-daily/2025-12-06",
-    "https://charts.spotify.com/charts/view/regional-global-daily/2025-12-07"
-]
+def create_data_path(filename):
+    return os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "..", "data", filename)
+    )
 
 def generate_date_strings(start_date: str, end_date: str):
     try:
@@ -63,7 +61,7 @@ def setup_webdriver_for_download():
     # Keep headless off by default so you can manually log in; you can enable headless if you don't need manual interaction.
     # options.headless = True  # uncomment if you want headless
     options.set_preference("browser.download.folderList", 2) # 0=desktop,1=downloads,2=custom
-    options.set_preference("browser.download.dir", DOWNLOAD_DIR)
+    options.set_preference("browser.download.dir", download_dir)
     options.set_preference("browser.download.useDownloadDir", True)
     options.set_preference(
         "browser.helperApps.neverAsk.saveToDisk",
@@ -85,8 +83,6 @@ def user_manual_login(driver):
     input("Log in manually in the browser, then press Enter here to continue...")
 
 
-
-# ===== DOWNLOAD LOOP =====
 def download_charts(driver, download_urls):
     for url in download_urls:
         print(f"\nOpening: {url}")
@@ -99,13 +95,13 @@ def download_charts(driver, download_urls):
             )
 
             # Track CSV files before download
-            before = set(glob.glob(os.path.join(DOWNLOAD_DIR, "*.csv")))
+            before = set(glob.glob(os.path.join(download_dir, "*.csv")))
 
             csv_button.click()
             print("Clicked CSV download button — waiting for file...")
 
             # Wait for new CSV to appear
-            after = wait_for_downloads(DOWNLOAD_DIR)
+            after = wait_for_downloads(download_dir)
 
             new_files = [f for f in after if f not in before]
 
@@ -135,21 +131,25 @@ if __name__ == "__main__":
         help="End date (YYYY-MM-DD)",
         default=datetime.today().strftime("%Y-%m-%d"),
     )
-    
+    parser.add_argument(
+        "-o",
+        "--output_dir",
+        type=str,
+        help="Path to directory where charts will be downloaded to",
+        default=create_data_path("global_charts"),
+    )
     args = parser.parse_args()
     
     date_strs = generate_date_strings(args.start_date, args.end_date)
     
-    # ===== ASK USER FOR FOLDER NAME =====
-    # make this into cli input
-    folder_name = "global_charts"
+    output_dir = args.output_dir
 
-    DOWNLOAD_DIR = os.path.join(os.getcwd(), "data", folder_name)
-    os.makedirs(DOWNLOAD_DIR, exist_ok=True)
+    download_dir = os.path.join(os.getcwd(), "data", output_dir)
+    os.makedirs(download_dir, exist_ok=True)
 
-    print(f"CSV files will be saved in: {DOWNLOAD_DIR}")
+    print(f"CSV files will be saved in: {download_dir}")
 
-    already_downloaded = set(os.listdir(DOWNLOAD_DIR))
+    already_downloaded = set(os.listdir(download_dir))
     print(f"{len(already_downloaded)} files already exist in download directory.")
     
     driver = setup_webdriver_for_download()
@@ -169,4 +169,4 @@ if __name__ == "__main__":
     
     driver.quit()
     print("\nAll downloads completed!")
-    print(f"Saved inside: {DOWNLOAD_DIR}")
+    print(f"Saved inside: {download_dir}")
