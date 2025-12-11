@@ -1,3 +1,7 @@
 reqs
  - install packages in requirements.txt
  - download GeckoDriver and in PATH
+
+ to-dos
+ - in download_charts() in download_charts.py, implement a redownloading mechanism to 
+   redownload skipped region and dates
