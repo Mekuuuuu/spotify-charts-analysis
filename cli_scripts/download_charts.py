@@ -81,6 +81,9 @@ def setup_webdriver_for_download():
     ) 
     options.set_preference("browser.download.manager.showWhenStarting", False)
     options.set_preference("pdfjs.disabled", True)
+    
+    options.set_preference("permissions.default.image", 2)
+    options.set_preference("permissions.default.stylesheet", 2)
 
     # ===== START FIREFOX =====
     driver = webdriver.Firefox(service=FirefoxService(), options=options)
@@ -175,7 +178,6 @@ def fill_and_submit_login_form(driver: webdriver, username: str, password: str):
         login_btn.click()
         time.sleep(5)
         
-    
 def manual_login(driver):
     """
     Prompt user to log in manually.
@@ -189,10 +191,12 @@ def download_charts(driver, download_urls):
     for url in download_urls:
         print(f"\nOpening: {url}")
         driver.get(url)
+        
+        backoff_time = 10
 
         try:
             # Locate the CSV download button
-            csv_button = WebDriverWait(driver, 15).until(
+            csv_button = WebDriverWait(driver, backoff_time).until(
                 EC.element_to_be_clickable((By.XPATH, '//button[@aria-labelledby="csv_download"]'))
             )
 
@@ -212,9 +216,12 @@ def download_charts(driver, download_urls):
             else:
                 print("WARNING: No new CSV detected, but check the folder.")
 
+            backoff_time = 10  # reset backoff time after a successful download
+
         except Exception as e:
             print(f"Error downloading CSV from {url}: {e}")
             print(f"Retrying download for {url}...")
+            backoff_time *= 2  # exponential backoff
             download_charts(driver, [url])  # retry download for this URL
 
 
@@ -301,11 +308,11 @@ if __name__ == "__main__":
         print("All charts already downloaded. Exiting.")
         exit(0)
     
-    username, password = get_spotify_credentials()
+    # username, password = get_spotify_credentials()
     
     driver = setup_webdriver_for_download()
     # fill_and_submit_login_form(driver, username, password)
-    manual_login(driver) # delete inquirer and dotenv if automated login is not usable
+    manual_login(driver) # delete inquirer if automated login is not usable
     
     download_charts(driver, download_urls)
     
