@@ -5,3 +5,4 @@ reqs
  to-dos
  - in download_charts() in download_charts.py, implement a redownloading mechanism to 
    redownload skipped region and dates
+ - after finishing project, there might be libraries in requirements.txt that are not used. delete them from requirements.txt

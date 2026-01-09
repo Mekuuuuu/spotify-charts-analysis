@@ -10,7 +10,6 @@ from datetime import datetime, timedelta
 import argparse
 from urllib.parse import quote
 from dotenv import load_dotenv
-import inquirer # delete if automated login is not usable
 import pandas as pd
 from itertools import product
 
@@ -68,7 +67,9 @@ def setup_webdriver_for_download():
     """
     Create a Selenium webdriver instance configured for downloading files.
     """
- 
+    profile_path = os.path.abspath(os.path.join(os.getcwd(), "firefox_profile"))
+    os.makedirs(profile_path, exist_ok=True)
+    
     options = webdriver.FirefoxOptions()
     # Keep headless off by default so you can manually log in; you can enable headless if you don't need manual interaction.
     # options.headless = True  # uncomment if you want headless
@@ -85,6 +86,9 @@ def setup_webdriver_for_download():
     options.set_preference("permissions.default.image", 2)
     options.set_preference("permissions.default.stylesheet", 2)
 
+    options.add_argument(f"-profile")
+    options.add_argument(profile_path)
+    
     # ===== START FIREFOX =====
     driver = webdriver.Firefox(service=FirefoxService(), options=options)
     
@@ -177,6 +181,32 @@ def fill_and_submit_login_form(driver: webdriver, username: str, password: str):
     while "accounts.spotify.com" in driver.current_url:
         login_btn.click()
         time.sleep(5)
+
+def is_logged_in(driver):
+    """
+    Check if the user is logged in by looking at url 
+    If redirected to charts.spotify.com/home, then not logged in.
+    If redirected to charts.spotify.com/charts/overview/global, then logged in.
+    """
+    
+    driver.get("https://charts.spotify.com")
+    
+    WebDriverWait(driver, 15).until(
+        lambda d: "charts.spotify.com" in d.current_url
+    )
+    
+    url = driver.current_url.lower()
+    
+    # Logged in users get redirected to /charts/...
+    # Logged out users get /home
+    if "/charts/" in url:
+        return True
+
+    if "/home" in url:
+        return False
+
+    # Fallback (Spotify sometimes shows intermediate pages)
+    return False
         
 def manual_login(driver):
     """
@@ -273,9 +303,11 @@ if __name__ == "__main__":
         )
         region_codes = pd.read_csv(all_regions_and_codes_csv_path)["code"].tolist()
     elif os.path.isfile(args.region_codes[0]):
-        region_codes = read_lines_from_file(args.region_codes)
+        region_codes = read_lines_from_file(args.region_codes[0]) # useful to avoid multiple command line args if many region codes
     else:
         region_codes = args.region_codes
+    
+    region_codes = [r.strip().lower() for r in region_codes if r.strip()] # clean up region codes (no empty strings, no whitespace, no accidental '\n' or ' ')
     
     region_codes = [
         "global" if r == "ww" else r for r in region_codes
@@ -308,11 +340,18 @@ if __name__ == "__main__":
         print("All charts already downloaded. Exiting.")
         exit(0)
     
-    # username, password = get_spotify_credentials()
-    
     driver = setup_webdriver_for_download()
-    # fill_and_submit_login_form(driver, username, password)
-    manual_login(driver) # delete inquirer if automated login is not usable
+    
+    if not is_logged_in(driver):
+        print("Not logged in. Opening Spotify login...")
+        manual_login(driver)
+        
+        if not is_logged_in(driver):
+            print("Login failed. Exiting.")
+            driver.quit()
+            exit(1)
+    
+    print("Login successful!")
     
     download_charts(driver, download_urls)
     
