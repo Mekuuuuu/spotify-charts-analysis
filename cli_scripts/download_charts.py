@@ -225,6 +225,9 @@ def manual_login(driver):
 
 def abort_program(driver, message):
     print(message)
+    for _ in range(5):
+        winsound.Beep(1500, 700)
+        time.sleep(0.2)
     driver.quit()
     raise SystemExit(1)
 
@@ -280,14 +283,27 @@ def download_charts(driver, download_urls):
         
         while not downloaded:  
             try:
-                # Locate the CSV download button
-                csv_button = WebDriverWait(driver, backoff_time).until(
-                    EC.element_to_be_clickable((By.XPATH, '//button[@aria-labelledby="csv_download"]'))
+                download_button_or_error_page = WebDriverWait(driver, backoff_time).until(
+                    EC.any_of(
+                        # Locate the CSV download button
+                        EC.element_to_be_clickable(
+                            # (By.CSS_SELECTOR, "button[aria-labelledby='csv_download']")
+                            (By.XPATH, '//button[@aria-labelledby="csv_download"]')
+                        ),
+                        
+                        EC.visibility_of_element_located(
+                            (By.CSS_SELECTOR, '[class^="ErrorPanel"]')
+                        ),
+                    )
                 )
-            
-                csv_button.click()
-                print("Clicked CSV download button — waiting for file...")
-
+                if download_button_or_error_page.tag_name == "button":
+                    print("Clicked CSV download button — waiting for file...")
+                    download_button = download_button_or_error_page
+                    download_button.click()
+                    
+                else:
+                    return
+                
                 # Wait for new CSV to appear
                 after = wait_for_downloads(download_dir)
                 new_files = [f for f in after if f not in before]
@@ -422,5 +438,6 @@ if __name__ == "__main__":
     download_charts(driver, download_urls)
     
     driver.quit()
-    print("\nAll downloads completed!")
+    print("\n✅ DOWNLOAD COMPLETE\n\nAll requested Spotify charts were downloaded successfully.")
+    # print("\nAll downloads completed!")
     print(f"Saved inside: {download_dir}")
