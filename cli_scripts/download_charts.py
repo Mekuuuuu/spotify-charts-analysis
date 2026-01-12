@@ -12,7 +12,7 @@ from urllib.parse import quote
 from dotenv import load_dotenv
 import pandas as pd
 from itertools import product
-import random
+import winsound
 
 def create_data_path(filename):
     return os.path.abspath(
@@ -183,14 +183,19 @@ def fill_and_submit_login_form(driver: webdriver, username: str, password: str):
         login_btn.click()
         time.sleep(5)
 
+def go_to_spotify_charts(driver):
+    """
+    Navigate to Spotify Charts homepage.
+    """
+    charts_url = "https://charts.spotify.com"
+    driver.get(charts_url)
+
 def is_logged_in(driver):
     """
     Check if the user is logged in by looking at url 
     If redirected to charts.spotify.com/home, then not logged in.
     If redirected to charts.spotify.com/charts/overview/global, then logged in.
     """
-    
-    driver.get("https://charts.spotify.com")
     
     WebDriverWait(driver, 15).until(
         lambda d: "charts.spotify.com" in d.current_url
@@ -217,6 +222,11 @@ def manual_login(driver):
     driver.get(login_page_url)
     
     input("Log in manually in the browser, then press Enter here to continue...")
+
+def abort_program(driver, message):
+    print(message)
+    driver.quit()
+    raise SystemExit(1)
 
 DOWNLOAD_STATS = {
     "start_time": None,
@@ -291,6 +301,9 @@ def download_charts(driver, download_urls):
                 backoff_time = 10  # reset backoff time after a successful download
 
             except Exception as e:
+                if not is_logged_in(driver):
+                    abort_program(driver, f"\n🚨 SPOTIFY SESSION LOST\n\nSpotify logged you out during the last download.\nLast attempted chart: {url}")
+                
                 # print(f"Error downloading CSV from {url}: {e}")
                 print(f"Spotify throttling or stalling: {e}")
                 print(f"Retrying download for {url}...")
@@ -393,10 +406,12 @@ if __name__ == "__main__":
     
     driver = setup_webdriver_for_download()
     
+    go_to_spotify_charts(driver)
     if not is_logged_in(driver):
         print("Not logged in. Opening Spotify login...")
         manual_login(driver)
         
+        go_to_spotify_charts(driver)
         if not is_logged_in(driver):
             print("Login failed. Exiting.")
             driver.quit()
