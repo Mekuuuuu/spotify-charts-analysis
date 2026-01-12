@@ -12,6 +12,7 @@ from urllib.parse import quote
 from dotenv import load_dotenv
 import pandas as pd
 from itertools import product
+import random
 
 def create_data_path(filename):
     return os.path.abspath(
@@ -98,29 +99,29 @@ def get_spotify_credentials():
     """
     Retrieve Spotify login credentials from environment variables.
     """
-    env_path = os.path.join(os.path.dirname(__file__), '..', ".env")
-    load_dotenv(env_path)
-    username = os.environ.get("SPOTIFY_USERNAME")
-    password = os.environ.get("SPOTIFY_PASSWORD")
+    # env_path = os.path.join(os.path.dirname(__file__), '..', ".env")
+    # load_dotenv(env_path)
+    # username = os.environ.get("SPOTIFY_USERNAME")
+    # password = os.environ.get("SPOTIFY_PASSWORD")
 
-    if username is None or password is None:
-        questions = []
+    # if username is None or password is None:
+    #     questions = []
 
-        if username is None:
-            questions.append(
-                inquirer.Text("username", message="Enter your Spotify username:")
-            )
+    #     if username is None:
+    #         questions.append(
+    #             inquirer.Text("username", message="Enter your Spotify username:")
+    #         )
 
-        if password is None:
-            questions.append(
-                inquirer.Password("password", message="Enter your Spotify password:")
-            )
+    #     if password is None:
+    #         questions.append(
+    #             inquirer.Password("password", message="Enter your Spotify password:")
+    #         )
 
-        answers = inquirer.prompt(questions)
-        if username is None:
-            username = answers["username"]
-        if password is None:
-            password = answers["password"]
+    #     answers = inquirer.prompt(questions)
+    #     if username is None:
+    #         username = answers["username"]
+    #     if password is None:
+    #         password = answers["password"]
 
     return username, password
 
@@ -217,44 +218,94 @@ def manual_login(driver):
     
     input("Log in manually in the browser, then press Enter here to continue...")
 
+DOWNLOAD_STATS = {
+    "start_time": None,
+    "end_time": None,
+    "per_chart": [],
+}
+
+def _now():
+    return time.time()
+
+def _fmt(seconds):
+    return f"{seconds:.2f}s"
+
+def log_start():
+    DOWNLOAD_STATS["start_time"] = _now()
+    print("\n📥 Download session started")
+
+def log_end():
+    DOWNLOAD_STATS["end_time"] = _now()
+    total = DOWNLOAD_STATS["end_time"] - DOWNLOAD_STATS["start_time"]
+
+    per = DOWNLOAD_STATS["per_chart"]
+
+    if per:
+        avg = sum(per) / len(per)
+        longest = max(per)
+    else:
+        avg = longest = 0
+
+    print("\n📊 DOWNLOAD STATS")
+    print(f"Total charts: {len(per)}")
+    print(f"Total time: {_fmt(total)}")
+    print(f"Average chart: {_fmt(avg)}")
+    print(f"Slowest chart: {_fmt(longest)}")
+
 def download_charts(driver, download_urls):
+    log_start()
+    
     for url in download_urls:
         print(f"\nOpening: {url}")
-        driver.get(url)
+        
+        chart_start = _now()
         
         backoff_time = 10
+        downloaded = False
 
-        try:
-            # Locate the CSV download button
-            csv_button = WebDriverWait(driver, backoff_time).until(
-                EC.element_to_be_clickable((By.XPATH, '//button[@aria-labelledby="csv_download"]'))
-            )
+        driver.get(url)
+        
+        # Track CSV files before download
+        before = set(glob.glob(os.path.join(download_dir, "*.csv")))
+        
+        while not downloaded:  
+            try:
+                # Locate the CSV download button
+                csv_button = WebDriverWait(driver, backoff_time).until(
+                    EC.element_to_be_clickable((By.XPATH, '//button[@aria-labelledby="csv_download"]'))
+                )
+            
+                csv_button.click()
+                print("Clicked CSV download button — waiting for file...")
 
-            # Track CSV files before download
-            before = set(glob.glob(os.path.join(download_dir, "*.csv")))
+                # Wait for new CSV to appear
+                after = wait_for_downloads(download_dir)
+                new_files = [f for f in after if f not in before]
 
-            csv_button.click()
-            print("Clicked CSV download button — waiting for file...")
+                if new_files:
+                    print("Downloaded:", os.path.basename(new_files[0]))
+                    downloaded = True
+                else:
+                    print("WARNING: No new CSV detected, but check the folder.")
 
-            # Wait for new CSV to appear
-            after = wait_for_downloads(download_dir)
+                backoff_time = 10  # reset backoff time after a successful download
 
-            new_files = [f for f in after if f not in before]
-
-            if new_files:
-                print("Downloaded:", os.path.basename(new_files[0]))
-            else:
-                print("WARNING: No new CSV detected, but check the folder.")
-
-            backoff_time = 10  # reset backoff time after a successful download
-
-        except Exception as e:
-            print(f"Error downloading CSV from {url}: {e}")
-            print(f"Retrying download for {url}...")
-            backoff_time *= 2  # exponential backoff
-            download_charts(driver, [url])  # retry download for this URL
-
-
+            except Exception as e:
+                # print(f"Error downloading CSV from {url}: {e}")
+                print(f"Spotify throttling or stalling: {e}")
+                print(f"Retrying download for {url}...")
+                print(f"Backing off {backoff_time:.0f}s...")
+                
+                time.sleep(backoff_time)
+                backoff_time = min(backoff_time * 1.7, 120)  # max 2 min
+                
+                driver.refresh()
+            
+        chart_end = _now()
+        elapsed = chart_end - chart_start
+        DOWNLOAD_STATS["per_chart"].append(elapsed)
+    
+    log_end()
 
 if __name__ == "__main__":    
     parser = argparse.ArgumentParser()
