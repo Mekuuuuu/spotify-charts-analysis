@@ -12,7 +12,6 @@ from urllib.parse import quote
 from dotenv import load_dotenv
 import pandas as pd
 from itertools import product
-import winsound
 
 def create_data_path(filename):
     return os.path.abspath(
@@ -224,10 +223,9 @@ def manual_login(driver):
     input("Log in manually in the browser, then press Enter here to continue...")
 
 def abort_program(driver, message):
-    print(message)
-    for _ in range(5):
-        winsound.Beep(1500, 700)
-        time.sleep(0.2)
+    now = time.localtime()
+    current_time = time.strftime("%Y-%m-%d %H:%M:%S", now)
+    print(f"{current_time}\n\n{message}")
     driver.quit()
     raise SystemExit(1)
 
